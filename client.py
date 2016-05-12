@@ -9,8 +9,9 @@ import time
 
 CHUNK_SIZE = 4096
 
-url = 'http://localhost/uploads'
-sid = str(uuid4())
+#url = 'http://localhost/uploads'
+url = 'http://ubuntu-srv-16.westeurope.cloudapp.azure.com/uploads'
+# sid = str(uuid4())
 
 def make_content_range_str(start, length, total):
     return 'bytes %(start)d-%(end)d/%(total)d' % \
@@ -19,9 +20,11 @@ def make_content_range_str(start, length, total):
 def send_meta(filename, url):
     checksum = calculate_file_checksum(filename)
 
-    data = {'filename': filename, 'checksum': checksum, 'sid': sid}
+    # data = {'filename': filename, 'checksum': checksum, 'sid': sid}
+    data = {'filename': filename, 'checksum': checksum}
     resp = requests.post(url, json=data)
-    print(resp)
+    print(resp.json())
+    return resp.json()['sid']
 
 
 def send_file(filename, url):
@@ -42,7 +45,7 @@ def send_file(filename, url):
 
 
 def main():
-    send_meta('test.txt', url)
+    sid = send_meta('test.txt', url)
     send_file('test.txt', url + '/' + sid)
 
 

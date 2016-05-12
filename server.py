@@ -4,6 +4,7 @@ import os
 from flask import Flask, request, redirect, url_for, jsonify
 from werkzeug import secure_filename
 from splitcat import make_file_part_name, check_file_consistency
+from uuid import uuid4
 
 
 UPLOAD_FOLDER = '/tmp/'
@@ -93,11 +94,14 @@ def upload_file_part(sid):
 def upload():
     data = request.get_json()
 
-    print(data)
-    sid = data['sid']
+    if 'sid' in data:
+        sid = data['sid']
+    else:
+        sid = str(uuid4())
 
     if sid in sessions:
-        return jsonify({'status': 'failure',
+        return jsonify({'sid': sid,
+                        'status': 'failure',
                         'description': 'session already exists'})
 
     sessions[sid] = data
@@ -105,9 +109,8 @@ def upload():
     dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
     os.mkdir(dirname)
 
-    return jsonify({'status': 'success'})
-
-
+    return jsonify({'sid': sid,
+                    'status': 'success'})
 
 
 
