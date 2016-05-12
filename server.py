@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-from flask import Flask, request, redirect, url_for, jsonify
+from flask import Flask, request, redirect, url_for, jsonify, Response
 from werkzeug import secure_filename
 from splitcat import make_file_part_name, check_file_consistency
 from uuid import uuid4
@@ -83,11 +83,12 @@ def upload_file_part(sid):
                 print('File consistent')
             else:
                 print('File is broken')
+            return 'OK', 201
     else:
         print('Invalid request')
         # value.save(full_name)
 
-    return 'OK'
+    return 'OK', 308
 
 
 @app.route("/uploads", methods=['POST'])
@@ -109,8 +110,10 @@ def upload():
     dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
     os.mkdir(dirname)
 
-    return jsonify({'sid': sid,
-                    'status': 'success'})
+    resp = Response(jsonify({'sid': sid,
+                             'status': 'success'}))
+    resp.headers['X-SID'] = sid
+    return resp
 
 
 
