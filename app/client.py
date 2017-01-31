@@ -2,20 +2,22 @@
 
 import requests
 from splitcat import mmap_file, calc_chunks_num, calculate_file_checksum, get_chunk
-from uuid import uuid4
+# from uuid import uuid4
 import os
-import time
+# import time
 
 
 CHUNK_SIZE = 4096
 
-#url = 'http://localhost/uploads'
-url = 'http://ubuntu-srv-16.westeurope.cloudapp.azure.com/uploads'
+url = 'http://localhost:8080/uploads'
+# url = 'http://ubuntu-srv-16.westeurope.cloudapp.azure.com/uploads'
 # sid = str(uuid4())
+
 
 def make_content_range_str(start, length, total):
     return 'bytes %(start)d-%(end)d/%(total)d' % \
         {'start': start, 'end': start + length, 'total': total}
+
 
 def send_meta(filename, url):
     checksum = calculate_file_checksum(filename)

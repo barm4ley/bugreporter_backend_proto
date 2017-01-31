@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
 import os
-from flask import Flask, request, redirect, url_for, jsonify, Response
+from flask import Flask, request, redirect, url_for, jsonify
 from werkzeug import secure_filename
-from splitcat import make_file_part_name, check_file_consistency
+# from splitcat import make_file_part_name
+from splitcat import check_file_consistency
 from uuid import uuid4
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 UPLOAD_FOLDER = '/tmp/'
@@ -15,46 +20,21 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 sessions = {}
 
+
 def allowed_file(filename):
     return True
     # return '.' in filename and \
     #        filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
 
 
-#@app.route('/uploads/<sid>', methods=['PUT'])
-#def upload_file_part():
-    #files = request.files
-
-    ## assume that only one file passed
-    #key = list(files.keys())[0]
-    #value = files[key]
-    ## filename = secure_filename(value.filename)
-    #filename = sessions[sid]['filename']
-
-    #if 'ChunkNo' in request.headers:
-        #chunk_no = int(request.headers['ChunkNo'])
-    #else:
-        #return '', 404
-
-    #full_name = os.path.join(app.config['UPLOAD_FOLDER'],
-                             #make_file_part_name(filename, chunk_no))
-
-    #if 'Content-Range' in request.headers:
-        ## extract starting byte from Content-Range header string
-        ## range_str = request.headers['Content-Range']
-        ## start_bytes = int(range_str.split(' ')[1].split('-')[0])
-
-        ## append chunk to the file on disk or create new file
-        #with open(full_name, 'ab') as ofile:
-            ## ofile.seek(start_bytes)
-            #ofile.write(value.stream.read())
-    #else:
-        #value.save(full_name)
-
-
 @app.route('/uploads/<sid>', methods=['PUT'])
 def upload_file_part(sid):
+
+    logger.debug('uploads/%s' % sid)
+
     files = request.files
+
+    logger.debug('files: %s' % files)
 
     # assume that only one file passed
     key = list(files.keys())[0]
@@ -93,6 +73,9 @@ def upload_file_part(sid):
 
 @app.route("/uploads", methods=['POST'])
 def upload():
+
+    logger.debug('/uploads')
+
     data = request.get_json()
 
     if 'sid' in data:
@@ -110,22 +93,24 @@ def upload():
     dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
     os.mkdir(dirname)
 
-    resp = Response(jsonify({'sid': sid,
-                             'status': 'success'}))
+    resp = jsonify({'sid': sid,
+                    'status': 'success'})
     resp.headers['X-SID'] = sid
     return resp
 
 
-
 @app.route("/", methods=['GET', 'POST'])
 def index():
-    if request.method == 'POST':
 
+    logger.debug('index')
+
+    if request.method == 'POST':
         file = request.files['file']
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             return redirect(url_for('index'))
+
     return """
     <!doctype html>
     <title>Upload new File</title>
@@ -138,4 +123,4 @@ def index():
     """ % "<br>".join(os.listdir(app.config['UPLOAD_FOLDER'],))
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=80, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)
