@@ -35,12 +35,9 @@ def upload_file_part(sid):
 
     ret_code = 308
 
-    files = request.files
+    logger.debug(request.data)
 
-    # assume that only one file passed
-    key = list(files.keys())[0]
-    value = files[key]
-    filename = secure_filename(value.filename)
+    filename = sessions[sid]['filename']
     full_name = os.path.join(app.config['UPLOAD_FOLDER'], sid, filename)
 
     if 'Content-Range' in request.headers:
@@ -51,7 +48,7 @@ def upload_file_part(sid):
 
         logger.debug(range_str)
 
-        chunk_data = value.stream.read()
+        chunk_data = request.data
         chunk_checksum = request.headers['X-CHUNK-CHECKSUM']
 
         logger.debug('Checksum: expected - %s, received - %s' % (chunk_checksum, calculate_checksum(chunk_data)))
@@ -67,13 +64,14 @@ def upload_file_part(sid):
         if os.path.getsize(full_name) == total_bytes:
             logger.debug('File size: %d' % os.path.getsize(full_name))
 
-            if check_file_consistency(full_name, sessions[sid]['checksum']):
-                logger.debug('File consistent')
-                ret_code = 308
-            else:
-                logger.debug('File is broken')
-                ret_code = 201
-            return 'OK', ret_code
+            #if check_file_consistency(full_name, sessions[sid]['checksum']):
+                #logger.debug('File consistent')
+                #ret_code = 308
+            #else:
+                #logger.debug('File is broken')
+                #ret_code = 201
+            #return 'OK', ret_code
+            return 'OK', 308
     else:
         logger.debug('Invalid request')
         # value.save(full_name)
@@ -87,23 +85,14 @@ def upload():
     logger.debug('/uploads')
 
     sid = str(uuid4())
-    data = request.get_json()
 
-    if data:
-        logger.debug(data)
+    sessions[sid] = {}
 
-        if 'sid' in data:
-            sid = data['sid']
+    if 'X-Upload-Content-Length' in request.headers:
+        logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
 
-        if sid in sessions:
-            return jsonify({'sid': sid,
-                            'status': 'failure',
-                            'description': 'session already exists'})
-
-        if 'X-Upload-Content-Length' in request.headers:
-            logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
-
-    sessions[sid] = data
+    filename = secure_filename(request.headers['X-Upload-FileName'])
+    sessions[sid]['filename'] = filename
 
     dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
     os.mkdir(dirname)

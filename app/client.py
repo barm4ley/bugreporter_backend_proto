@@ -5,10 +5,24 @@ from splitcat import mmap_file, calc_chunks_num, calculate_checksum, calculate_f
 import os
 
 import logging
+
+
+try:
+    import http.client as http_client
+except ImportError:
+    # Python 2
+    import httplib as http_client
+http_client.HTTPConnection.debuglevel = 1
+
+requests_log = logging.getLogger("requests.packages.urllib3")
+requests_log.setLevel(logging.DEBUG)
+requests_log.propagate = True
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 # Disable requests verbosity
-logging.getLogger('requests').setLevel(logging.CRITICAL)
+# logging.getLogger('requests').setLevel(logging.CRITICAL)
 
 
 url = 'http://localhost:8080/uploads'
@@ -25,7 +39,8 @@ def send_meta(filename, url):
 
     # data = {'filename': filename, 'checksum': checksum, 'sid': sid}
     data = {'filename': filename, 'checksum': checksum}
-    resp = requests.post(url, json=data)
+    headers = {'X-Upload-FileName': filename}
+    resp = requests.post(url, json=data, headers=headers)
     logger.debug(resp.json())
     logger.debug(resp.headers)
     return resp.json()
@@ -46,9 +61,10 @@ def send_file(filename, url, chunk_size):
         headers = {'Content-Range': range_str,
                    'X-CHUNK-CHECKSUM': chunk_checksum}
 
-        files = {filename: chunk_data}
+        # files = {filename: chunk_data}
 
-        resp = requests.put(url, files=files, headers=headers)
+        # resp = requests.put(url, files=files, headers=headers)
+        resp = requests.put(url, data=chunk_data, headers=headers)
         if resp.status_code != 308:
             break
 
