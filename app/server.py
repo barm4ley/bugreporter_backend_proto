@@ -4,7 +4,7 @@ import os
 from flask import Flask, request, redirect, url_for, jsonify
 from werkzeug import secure_filename
 # from splitcat import make_file_part_name
-from splitcat import check_file_consistency, check_consistency
+from splitcat import check_file_consistency, check_consistency, calculate_checksum
 from uuid import uuid4
 
 import logging
@@ -37,8 +37,6 @@ def upload_file_part(sid):
 
     files = request.files
 
-    logger.debug('files: %s' % files)
-
     # assume that only one file passed
     key = list(files.keys())[0]
     value = files[key]
@@ -53,11 +51,10 @@ def upload_file_part(sid):
 
         logger.debug(range_str)
 
-        logger.debug('start_bytes %d' % start_bytes)
-
         chunk_data = value.stream.read()
         chunk_checksum = request.headers['X-CHUNK-CHECKSUM']
 
+        logger.debug('Checksum: expected - %s, received - %s' % (chunk_checksum, calculate_checksum(chunk_data)))
         if not check_consistency(chunk_data, chunk_checksum):
             logger.error('Chunk transmission error: checksum calculation failed')
             return 'OK', 416
@@ -67,9 +64,9 @@ def upload_file_part(sid):
             ofile.seek(start_bytes)
             ofile.write(chunk_data)
 
-        logger.debug('File size: %d' % os.path.getsize(full_name))
-
         if os.path.getsize(full_name) == total_bytes:
+            logger.debug('File size: %d' % os.path.getsize(full_name))
+
             if check_file_consistency(full_name, sessions[sid]['checksum']):
                 logger.debug('File consistent')
                 ret_code = 308
@@ -89,17 +86,22 @@ def upload():
 
     logger.debug('/uploads')
 
+    sid = str(uuid4())
     data = request.get_json()
 
-    if 'sid' in data:
-        sid = data['sid']
-    else:
-        sid = str(uuid4())
+    if data:
+        logger.debug(data)
 
-    if sid in sessions:
-        return jsonify({'sid': sid,
-                        'status': 'failure',
-                        'description': 'session already exists'})
+        if 'sid' in data:
+            sid = data['sid']
+
+        if sid in sessions:
+            return jsonify({'sid': sid,
+                            'status': 'failure',
+                            'description': 'session already exists'})
+
+        if 'X-Upload-Content-Length' in request.headers:
+            logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
 
     sessions[sid] = data
 
@@ -114,6 +116,7 @@ def upload():
 
     resp.headers['X-SID'] = sid
     resp.headers['X-CHUNK-SIZE'] = chunk_size
+    resp.headers['Location'] = url_for('upload_file_part', sid=sid)
     return resp
 
 
