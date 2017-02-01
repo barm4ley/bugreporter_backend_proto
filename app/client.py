@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import requests
-from splitcat import mmap_file, calc_chunks_num, calculate_file_checksum, get_chunk
+from splitcat import mmap_file, calc_chunks_num, calculate_checksum, calculate_file_checksum, get_chunk
 # from uuid import uuid4
 import os
 
@@ -36,13 +36,19 @@ def send_file(filename, url):
     for chunk in range(chunks_num):
         # time.sleep(1)
         chunk_data = get_chunk(contents, chunk, CHUNK_SIZE)
+        chunk_checksum = calculate_checksum(chunk_data)
+
         start = chunk * CHUNK_SIZE
 
         range_str = make_content_range_str(start, len(chunk_data), file_size)
-        headers = {'Content-Range': range_str}
+        headers = {'Content-Range': range_str,
+                   'X-CHUNK-CHECKSUM': chunk_checksum}
+
         files = {filename: chunk_data}
 
-        requests.put(url, files=files, headers=headers)
+        resp = requests.put(url, files=files, headers=headers)
+        if resp.status_code != 308:
+            break
 
 
 def main():

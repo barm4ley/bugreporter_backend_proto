@@ -17,13 +17,25 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
+# Conistency operations
+
+def calculate_checksum(data):
+    return hashlib.md5(data).hexdigest()
+
+
+def check_consistency(data, digest):
+    return calculate_checksum(data) == digest
+
+
 def calculate_file_checksum(filename):
-    return hashlib.md5(open(filename, 'rb').read()).hexdigest()
+    return calculate_checksum(open(filename, 'rb').read())
 
 
 def check_file_consistency(filename, digest):
     return calculate_file_checksum(filename) == digest
 
+
+# split/cat operations
 
 def mmap_file(filename):
     logger.debug('mmaping %s file' % filename)
@@ -40,6 +52,10 @@ def get_chunk(contents, chunk_number, chunk_len=4096):
     start = chunk_number * chunk_len
     end = start + chunk_len
     return contents[start:end]
+
+
+def byte_offset_to_chunk_num(offset, chunk_len=4096):
+    return offset // chunk_len
 
 
 def make_file_part_name(base_name, chunk_number):
