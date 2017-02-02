@@ -9,3 +9,20 @@ class Session(object):
         self.checksum = 0
         self.last_chunk = -1
         self.status = UPLOAD_STATUS_PENDING
+
+
+class SessionsRepo(object):
+    def __init__(self):
+        self.sessions = {}
+
+    def add(self, session):
+        self.sessions[session.sid] = session
+
+    def delete(self, sid):
+        self.sessions.pop(sid, None)
+
+    def get(self, sid):
+        return self.sessions[sid]
+
+    def is_known(self, sid):
+        return sid in self.sessions

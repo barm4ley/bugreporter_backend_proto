@@ -7,7 +7,7 @@ from werkzeug import secure_filename
 from splitcat import check_file_consistency, check_consistency, calculate_checksum, byte_offset_to_chunk_num
 from uuid import uuid4
 
-from session import Session, UPLOAD_STATUS_FINISHED
+from session import Session, SessionsRepo, UPLOAD_STATUS_FINISHED
 from bugreporter_helper import make_metadata_file
 
 import logging
@@ -25,7 +25,7 @@ ALLOWED_EXTENSIONS = set(['txt'])
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-sessions_repo = {}
+sessions_repo = SessionsRepo()
 
 
 def allowed_file(filename):
@@ -43,7 +43,7 @@ def upload_init():
 
     session = Session(sid)
 
-    sessions_repo[session.sid] = session
+    sessions_repo.add(session)
 
     data = request.get_json()
 
@@ -76,7 +76,7 @@ def upload_init():
 @app.route('/uploads/<sid>', methods=['PUT'])
 def upload_file_part(sid):
 
-    session = sessions_repo[sid]
+    session = sessions_repo.get(sid)
 
     logger.debug('uploads/%s' % sid)
 
@@ -133,15 +133,17 @@ def upload_file_part(sid):
 @app.route('/status/<sid>', methods=['GET'])
 def upload_status(sid):
 
-    session = sessions_repo[sid]
+    session = sessions_repo.get(sid)
 
     resp = jsonify({'sid': sid,
                     'chunk_size': chunk_size,
                     'last_chunk': session.last_chunk,
                     'status': session.status})
 
+    resp.headers['Location'] = url_for('upload_file_part', sid=session.sid)
+
     if session.status == UPLOAD_STATUS_FINISHED:
-        sessions_repo.pop(session.sid, None)
+        sessions_repo.delete(session.sid)
 
     return resp
 
