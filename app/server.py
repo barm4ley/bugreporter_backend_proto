@@ -7,6 +7,8 @@ from werkzeug import secure_filename
 from splitcat import check_file_consistency, check_consistency, calculate_checksum, byte_offset_to_chunk_num
 from uuid import uuid4
 
+from session import Session
+
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
@@ -22,7 +24,7 @@ ALLOWED_EXTENSIONS = set(['txt'])
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-sessions = {}
+sessions_repo = {}
 
 
 def allowed_file(filename):
@@ -38,30 +40,36 @@ def upload_init():
 
     sid = str(uuid4())
 
-    sessions[sid] = {}
+    session = Session(sid)
+
+    sessions_repo[session.sid] = session
 
     if 'X-Upload-Content-Length' in request.headers:
         logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
 
     filename = secure_filename(request.headers['X-Upload-FileName'])
-    sessions[sid]['filename'] = filename
-    sessions[sid]['upload_status'] = -1
+    checksum = request.headers['X-FILE-CHECKSUM']
+    session.filename = filename
+    session.checksum = checksum
+    session.upload_status = -1
 
-    dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
+    dirname = os.path.join(app.config['UPLOAD_FOLDER'], session.sid)
     os.mkdir(dirname)
 
-    resp = jsonify({'sid': sid,
+    resp = jsonify({'sid': session.sid,
                     'chunk_size': chunk_size,
                     'status': 'success'})
 
     resp.headers['X-SID'] = sid
     resp.headers['X-CHUNK-SIZE'] = chunk_size
-    resp.headers['Location'] = url_for('upload_file_part', sid=sid)
+    resp.headers['Location'] = url_for('upload_file_part', sid=session.sid)
     return resp
 
 
 @app.route('/uploads/<sid>', methods=['PUT'])
 def upload_file_part(sid):
+
+    session = sessions_repo[sid]
 
     logger.debug('uploads/%s' % sid)
 
@@ -69,7 +77,7 @@ def upload_file_part(sid):
 
     # logger.debug(request.data)
 
-    filename = sessions[sid]['filename']
+    filename = session.filename
     full_name = os.path.join(app.config['UPLOAD_FOLDER'], sid, filename)
 
     if 'Content-Range' in request.headers:
@@ -93,21 +101,21 @@ def upload_file_part(sid):
             ofile.seek(start_bytes)
             ofile.write(chunk_data)
 
-        sessions[sid]['upload_status'] = byte_offset_to_chunk_num(start_bytes, chunk_size)
+        session.upload_status = byte_offset_to_chunk_num(start_bytes, chunk_size)
 
         if os.path.getsize(full_name) == total_bytes:
             logger.debug('File size: %d' % os.path.getsize(full_name))
 
-            sessions[sid]['upload_status'] = 'done'
+            session.upload_status = 'done'
 
-            #if check_file_consistency(full_name, sessions[sid]['checksum']):
-                #logger.debug('File consistent')
-                #ret_code = 308
-            #else:
-                #logger.debug('File is broken')
-                #ret_code = 201
-            #return 'OK', ret_code
-            return 'OK', 201
+            if check_file_consistency(full_name, session.checksum):
+                logger.debug('File consistent')
+                ret_code = 308
+            else:
+                logger.debug('File is broken')
+                ret_code = 201
+            return 'OK', ret_code
+            # return 'OK', 201
     else:
         logger.debug('Invalid request')
         # value.save(full_name)
@@ -117,7 +125,21 @@ def upload_file_part(sid):
 
 @app.route('/status/<sid>', methods=['GET'])
 def upload_status(sid):
-    pass
+
+    session = sessions_repo[sid]
+
+    resp = jsonify({'sid': sid,
+                    'chunk_size': chunk_size,
+                    'upload_status': session.upload_status})
+
+    resp.headers['X-SID'] = sid
+    resp.headers['X-CHUNK-SIZE'] = chunk_size
+    resp.headers['X-UPLOAD-STATUS'] = session.upload_status
+
+    if session.upload_status == 'done':
+        sessions_repo.pop(session.sid, None)
+
+    return resp
 
 
 @app.route("/", methods=['GET', 'POST'])

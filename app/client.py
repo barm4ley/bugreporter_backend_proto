@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 url = 'http://localhost:8080/uploads'
+status_url = 'http://localhost:8080/status'
 # url = 'http://ubuntu-srv-16.westeurope.cloudapp.azure.com/uploads'
 
 
@@ -39,19 +40,21 @@ def send_meta(filename, url):
 
     # data = {'filename': filename, 'checksum': checksum, 'sid': sid}
     data = {'filename': filename, 'checksum': checksum}
-    headers = {'X-Upload-FileName': filename}
+    headers = {'X-Upload-FileName': filename, 'X-FILE-CHECKSUM': checksum}
     resp = requests.post(url, json=data, headers=headers)
     logger.debug(resp.json())
     logger.debug(resp.headers)
     return resp.json()
 
 
-def send_file(filename, url, chunk_size):
+def send_file(filename, url, chunk_size, start_chunk_num, end_chunk_num=None):
     contents = mmap_file(filename)
     chunks_num = calc_chunks_num(filename, chunk_size)
     file_size = os.path.getsize(filename)
 
-    for chunk in range(chunks_num):
+    end_chunk = end_chunk_num if end_chunk_num else chunks_num
+
+    for chunk in range(start_chunk_num, chunks_num):
         chunk_data = get_chunk(contents, chunk, chunk_size)
         chunk_checksum = calculate_checksum(chunk_data)
 
@@ -61,21 +64,27 @@ def send_file(filename, url, chunk_size):
         headers = {'Content-Range': range_str,
                    'X-CHUNK-CHECKSUM': chunk_checksum}
 
-        # files = {filename: chunk_data}
-
-        # resp = requests.put(url, files=files, headers=headers)
         resp = requests.put(url, data=chunk_data, headers=headers)
         if resp.status_code != 308:
             break
 
+def get_status(url, sid):
+    url = url + '/' + sid
+    resp = requests.get(url)
+
+    logger.debug(resp.json())
+    logger.debug(resp.headers)
+
+    return resp.json()
 
 def main():
     meta_data = send_meta('test.txt', url)
     sid = meta_data['sid']
     chunk_size = meta_data['chunk_size']
 
-    send_file('test.txt', url + '/' + sid, chunk_size)
+    send_file('test.txt', url + '/' + sid, chunk_size, 0)
 
+    get_status(status_url, sid)
 
 if __name__ == '__main__':
     main()
