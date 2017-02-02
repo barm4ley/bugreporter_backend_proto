@@ -6,13 +6,13 @@ ENV PIP_GLOBAL_OPTS "-vvv --no-cache-dir"
 
 RUN apt-get update \
  && apt-get install -y vim \
- && apt-get install -y net-tools \
- && apt-get install -y jsonpickle \
- && apt-get install -y redis
+ && apt-get install -y net-tools
 
 RUN pip3 $PIP_GLOBAL_OPTS install --upgrade pip \
                                            flask \
-                                           requests
+                                           requests \
+                                           jsonpickle \
+                                           redis
 
 ADD app /app
 
