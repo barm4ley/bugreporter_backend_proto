@@ -7,7 +7,7 @@ from werkzeug import secure_filename
 from splitcat import check_file_consistency, check_consistency, calculate_checksum, byte_offset_to_chunk_num
 from uuid import uuid4
 
-from session import Session
+from session import Session, UPLOAD_STATUS_FINISHED
 from bugreporter_helper import make_metadata_file
 
 import logging
@@ -108,12 +108,12 @@ def upload_file_part(sid):
             ofile.seek(start_bytes)
             ofile.write(chunk_data)
 
-        session.upload_status = byte_offset_to_chunk_num(start_bytes, chunk_size)
+        session.last_chunk = byte_offset_to_chunk_num(start_bytes, chunk_size)
 
         if os.path.getsize(full_name) == total_bytes:
             logger.debug('File size: %d' % os.path.getsize(full_name))
 
-            session.upload_status = 'done'
+            session.status = UPLOAD_STATUS_FINISHED
 
             if check_file_consistency(full_name, session.checksum):
                 logger.debug('File consistent')
@@ -137,13 +137,10 @@ def upload_status(sid):
 
     resp = jsonify({'sid': sid,
                     'chunk_size': chunk_size,
-                    'upload_status': session.upload_status})
+                    'last_chunk': session.last_chunk,
+                    'status': session.status})
 
-    resp.headers['X-SID'] = sid
-    resp.headers['X-CHUNK-SIZE'] = chunk_size
-    resp.headers['X-UPLOAD-STATUS'] = session.upload_status
-
-    if session.upload_status == 'done':
+    if session.status == UPLOAD_STATUS_FINISHED:
         sessions_repo.pop(session.sid, None)
 
     return resp
