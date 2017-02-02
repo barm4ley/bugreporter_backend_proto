@@ -117,10 +117,10 @@ def upload_file_part(sid):
 
             if check_file_consistency(full_name, session.checksum):
                 logger.debug('File consistent')
-                ret_code = 308
+                ret_code = 201
             else:
                 logger.debug('File is broken')
-                ret_code = 201
+                ret_code = 416
             return 'OK', ret_code
             # return 'OK', 201
     else:
