@@ -1,4 +1,6 @@
 import os
+from time import strftime
+from random import randint
 
 
 def make_metadata_file(metadata, meta_dir, meta_file='metadata.pl'):
@@ -23,3 +25,12 @@ $VAR1 = {{
         ofile.write(str.encode(meta_str))
 
     return meta_str
+
+
+
+def make_report_dir(parent_dir):
+    dir_name = strftime('SubmitBug-%Y-%m-%d-%H-%M-%S-unity3d') + str(randint(10000, 20000))
+    full_dir_name = os.path.join(parent_dir, dir_name)
+    os.makedirs(full_dir_name)
+    return full_dir_name
+

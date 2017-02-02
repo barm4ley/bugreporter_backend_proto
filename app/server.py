@@ -4,11 +4,12 @@ import os
 from flask import Flask, request, redirect, url_for, jsonify
 from werkzeug import secure_filename
 # from splitcat import make_file_part_name
-from splitcat import check_file_consistency, check_consistency, calculate_checksum, byte_offset_to_chunk_num
+from splitcat import check_file_consistency, check_consistency, byte_offset_to_chunk_num
 from uuid import uuid4
+import shutil
 
 from session import Session, SessionsRepo, UPLOAD_STATUS_FINISHED
-from bugreporter_helper import make_metadata_file
+from bugreporter_helper import make_metadata_file, make_report_dir
 
 import logging
 
@@ -19,11 +20,14 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 4096
 chunk_size = CHUNK_SIZE
 
-UPLOAD_FOLDER = '/tmp/'
+UPLOAD_DIR = '/tmp/'
+PROCESSOR_DIR = '/tmp/bugz/'
+
 ALLOWED_EXTENSIONS = set(['txt'])
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_DIR'] = UPLOAD_DIR
+app.config['PROCESSOR_DIR'] = PROCESSOR_DIR
 
 sessions_repo = SessionsRepo()
 
@@ -58,7 +62,7 @@ def upload_init():
     logger.debug(session.filename)
     logger.debug(session.checksum)
 
-    dirname = os.path.join(app.config['UPLOAD_FOLDER'], session.sid)
+    dirname = os.path.join(app.config['UPLOAD_DIR'], session.sid)
     os.mkdir(dirname)
 
     make_metadata_file(data['metadata'], dirname)
@@ -78,14 +82,13 @@ def upload_file_part(sid):
 
     session = sessions_repo.get(sid)
 
-    logger.debug('uploads/%s' % sid)
-
     ret_code = 308
 
     # logger.debug(request.data)
 
     filename = session.filename
-    full_name = os.path.join(app.config['UPLOAD_FOLDER'], sid, filename)
+    temp_report_dir = os.path.join(app.config['UPLOAD_DIR'], sid)
+    full_name = os.path.join(temp_report_dir, filename)
 
     if 'Content-Range' in request.headers:
         # extract starting byte from Content-Range header string
@@ -93,12 +96,9 @@ def upload_file_part(sid):
         start_bytes = int(range_str.split(' ')[1].split('-')[0])
         total_bytes = int(range_str.split(' ')[1].split('/')[1])
 
-        logger.debug(range_str)
-
         chunk_data = request.data
         chunk_checksum = request.headers['X-CHUNK-CHECKSUM']
 
-        logger.debug('Checksum: expected - %s, received - %s' % (chunk_checksum, calculate_checksum(chunk_data)))
         if not check_consistency(chunk_data, chunk_checksum):
             logger.error('Chunk transmission error: checksum calculation failed')
             return 'OK', 416
@@ -117,6 +117,13 @@ def upload_file_part(sid):
 
             if check_file_consistency(full_name, session.checksum):
                 logger.debug('File consistent')
+
+                report_dir = make_report_dir(app.config['PROCESSOR_DIR'])
+
+                shutil.move(os.path.join(temp_report_dir, filename), os.path.join(report_dir, filename))
+                shutil.move(os.path.join(temp_report_dir, 'metadata.pl'), os.path.join(report_dir, 'metadata.pl'))
+                os.removedirs(temp_report_dir)
+
                 ret_code = 201
             else:
                 logger.debug('File is broken')
@@ -157,7 +164,7 @@ def index():
         file = request.files['file']
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            file.save(os.path.join(app.config['UPLOAD_DIR'], filename))
             return redirect(url_for('index'))
 
     return """
@@ -169,7 +176,7 @@ def index():
          <input type=submit value=Upload>
     </form>
     <p>%s</p>
-    """ % "<br>".join(os.listdir(app.config['UPLOAD_FOLDER'],))
+    """ % "<br>".join(os.listdir(app.config['UPLOAD_DIR'],))
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8080, debug=True)
