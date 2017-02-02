@@ -8,6 +8,7 @@ from splitcat import check_file_consistency, check_consistency, calculate_checks
 from uuid import uuid4
 
 from session import Session
+from bugreporter_helper import make_metadata_file
 
 import logging
 
@@ -44,17 +45,23 @@ def upload_init():
 
     sessions_repo[session.sid] = session
 
+    data = request.get_json()
+
     if 'X-Upload-Content-Length' in request.headers:
         logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
 
-    filename = secure_filename(request.headers['X-Upload-FileName'])
-    checksum = request.headers['X-FILE-CHECKSUM']
-    session.filename = filename
-    session.checksum = checksum
+    session.filename = secure_filename(data['filename'])
+    session.checksum = data['checksum']
+
     session.upload_status = -1
+
+    logger.debug(session.filename)
+    logger.debug(session.checksum)
 
     dirname = os.path.join(app.config['UPLOAD_FOLDER'], session.sid)
     os.mkdir(dirname)
+
+    make_metadata_file(data['metadata'], dirname)
 
     resp = jsonify({'sid': session.sid,
                     'chunk_size': chunk_size,

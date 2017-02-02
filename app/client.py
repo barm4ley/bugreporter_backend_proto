@@ -38,8 +38,20 @@ def make_content_range_str(start, length, total):
 def send_meta(filename, url):
     checksum = calculate_file_checksum(filename)
 
-    # data = {'filename': filename, 'checksum': checksum, 'sid': sid}
-    data = {'filename': filename, 'checksum': checksum}
+    data = {'filename': filename,
+            'checksum': checksum,
+            'metadata': {
+                'version': '5.5.1f1_88d00a7498cd',
+                'description': 'i%20can%27t%20start%20my%20untiy%0A%0A1.%20What%20happened%0A%0A2.%20How%20we%20can%20reproduce%20it%20using%20the%20example%20you%20attached%0A%0A%0ALicense%20type%3A%20Free',
+                'bug_type_id': '4',
+                'customer_email': 'jiacitan96@gmail.com',
+                'title': 'i%20can%27t%20start%20my%20untiy',
+                'computer': 'Intel%28R%29%20Core%28TM%29%20i7-4510U%20CPU%20%40%202.00GHz%3B%20NVIDIA%20GeForce%20840M%20%20%20%20%20%20%20%3B%20Windows%2010%20%20%2810.0.0%29%2064bit',
+                'timestamp': '2017-02-02 13:10:22',
+                'bug_reproducibility': 'Always'
+                }
+            }
+
     headers = {'X-Upload-FileName': filename, 'X-FILE-CHECKSUM': checksum}
     resp = requests.post(url, json=data, headers=headers)
     logger.debug(resp.json())
