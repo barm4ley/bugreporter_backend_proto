@@ -4,14 +4,17 @@ import os
 from flask import Flask, request, redirect, url_for, jsonify
 from werkzeug import secure_filename
 # from splitcat import make_file_part_name
-from splitcat import check_file_consistency, check_consistency, calculate_checksum
+from splitcat import check_file_consistency, check_consistency, calculate_checksum, byte_offset_to_chunk_num
 from uuid import uuid4
 
 import logging
-logging.basicConfig(level=logging.INFO)
+
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+
 CHUNK_SIZE = 4096
+chunk_size = CHUNK_SIZE
 
 UPLOAD_FOLDER = '/tmp/'
 ALLOWED_EXTENSIONS = set(['txt'])
@@ -28,6 +31,35 @@ def allowed_file(filename):
     #        filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
 
 
+@app.route("/uploads", methods=['POST'])
+def upload_init():
+
+    logger.debug('/uploads')
+
+    sid = str(uuid4())
+
+    sessions[sid] = {}
+
+    if 'X-Upload-Content-Length' in request.headers:
+        logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
+
+    filename = secure_filename(request.headers['X-Upload-FileName'])
+    sessions[sid]['filename'] = filename
+    sessions[sid]['upload_status'] = -1
+
+    dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
+    os.mkdir(dirname)
+
+    resp = jsonify({'sid': sid,
+                    'chunk_size': chunk_size,
+                    'status': 'success'})
+
+    resp.headers['X-SID'] = sid
+    resp.headers['X-CHUNK-SIZE'] = chunk_size
+    resp.headers['Location'] = url_for('upload_file_part', sid=sid)
+    return resp
+
+
 @app.route('/uploads/<sid>', methods=['PUT'])
 def upload_file_part(sid):
 
@@ -35,7 +67,7 @@ def upload_file_part(sid):
 
     ret_code = 308
 
-    logger.debug(request.data)
+    # logger.debug(request.data)
 
     filename = sessions[sid]['filename']
     full_name = os.path.join(app.config['UPLOAD_FOLDER'], sid, filename)
@@ -61,8 +93,12 @@ def upload_file_part(sid):
             ofile.seek(start_bytes)
             ofile.write(chunk_data)
 
+        sessions[sid]['upload_status'] = byte_offset_to_chunk_num(start_bytes, chunk_size)
+
         if os.path.getsize(full_name) == total_bytes:
             logger.debug('File size: %d' % os.path.getsize(full_name))
+
+            sessions[sid]['upload_status'] = 'done'
 
             #if check_file_consistency(full_name, sessions[sid]['checksum']):
                 #logger.debug('File consistent')
@@ -71,7 +107,7 @@ def upload_file_part(sid):
                 #logger.debug('File is broken')
                 #ret_code = 201
             #return 'OK', ret_code
-            return 'OK', 308
+            return 'OK', 201
     else:
         logger.debug('Invalid request')
         # value.save(full_name)
@@ -79,34 +115,9 @@ def upload_file_part(sid):
     return 'OK', 308
 
 
-@app.route("/uploads", methods=['POST'])
-def upload():
-
-    logger.debug('/uploads')
-
-    sid = str(uuid4())
-
-    sessions[sid] = {}
-
-    if 'X-Upload-Content-Length' in request.headers:
-        logger.debug('X-Upload-Content-Length: %s' % request.headers['X-Upload-Content-Length'])
-
-    filename = secure_filename(request.headers['X-Upload-FileName'])
-    sessions[sid]['filename'] = filename
-
-    dirname = os.path.join(app.config['UPLOAD_FOLDER'], sid)
-    os.mkdir(dirname)
-
-    chunk_size = CHUNK_SIZE  # Maybe should be dynamically calculated
-
-    resp = jsonify({'sid': sid,
-                    'chunk_size': chunk_size,
-                    'status': 'success'})
-
-    resp.headers['X-SID'] = sid
-    resp.headers['X-CHUNK-SIZE'] = chunk_size
-    resp.headers['Location'] = url_for('upload_file_part', sid=sid)
-    return resp
+@app.route('/status/<sid>', methods=['GET'])
+def upload_status(sid):
+    pass
 
 
 @app.route("/", methods=['GET', 'POST'])
