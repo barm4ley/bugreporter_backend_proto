@@ -20,14 +20,11 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 4096
 chunk_size = CHUNK_SIZE
 
-UPLOAD_DIR = '/tmp/'
-PROCESSOR_DIR = '/tmp/bugz/'
-
-ALLOWED_EXTENSIONS = set(['txt'])
+ALLOWED_EXTENSIONS = set(['txt', 'zip'])
 
 app = Flask(__name__)
-app.config['UPLOAD_DIR'] = UPLOAD_DIR
-app.config['PROCESSOR_DIR'] = PROCESSOR_DIR
+
+app.config.from_object('settings')
 
 sessions_repo = SessionsRepo()
 
@@ -90,49 +87,46 @@ def upload_file_part(sid):
     temp_report_dir = os.path.join(app.config['UPLOAD_DIR'], sid)
     full_name = os.path.join(temp_report_dir, filename)
 
-    if 'Content-Range' in request.headers:
-        # extract starting byte from Content-Range header string
-        range_str = request.headers['Content-Range']
-        start_bytes = int(range_str.split(' ')[1].split('-')[0])
-        total_bytes = int(range_str.split(' ')[1].split('/')[1])
+    # extract starting byte from Content-Range header string
+    range_str = request.headers['Content-Range']
+    start_bytes = int(range_str.split(' ')[1].split('-')[0])
+    total_bytes = int(range_str.split(' ')[1].split('/')[1])
 
-        chunk_data = request.data
-        chunk_checksum = request.headers['X-CHUNK-CHECKSUM']
+    chunk_data = request.data
+    chunk_checksum = request.headers['X-CHUNK-CHECKSUM']
 
-        if not check_consistency(chunk_data, chunk_checksum):
-            logger.error('Chunk transmission error: checksum calculation failed')
-            return 'OK', 416
+    if not check_consistency(chunk_data, chunk_checksum):
+        logger.error('Chunk transmission error: checksum calculation failed')
+        return 'OK', 416
 
-        # append chunk to the file on disk or create new file
-        with open(full_name, 'ab') as ofile:
-            ofile.seek(start_bytes)
-            ofile.write(chunk_data)
+    # append chunk to the file on disk or create new file
+    with open(full_name, 'ab') as ofile:
+        ofile.seek(start_bytes)
+        ofile.write(chunk_data)
 
-        session.last_chunk = byte_offset_to_chunk_num(start_bytes, chunk_size)
+    session.last_chunk = byte_offset_to_chunk_num(start_bytes, chunk_size)
 
-        if os.path.getsize(full_name) == total_bytes:
-            logger.debug('File size: %d' % os.path.getsize(full_name))
+    if os.path.getsize(full_name) == total_bytes:
+        logger.debug('File size: %d' % os.path.getsize(full_name))
 
-            session.status = UPLOAD_STATUS_FINISHED
+        session.status = UPLOAD_STATUS_FINISHED
 
-            if check_file_consistency(full_name, session.checksum):
-                logger.debug('File consistent')
+        if check_file_consistency(full_name, session.checksum):
+            logger.debug('File consistent')
 
-                report_dir = make_report_dir(app.config['PROCESSOR_DIR'])
+            report_dir = make_report_dir(app.config['PROCESSOR_DIR'])
 
-                shutil.move(os.path.join(temp_report_dir, filename), os.path.join(report_dir, filename))
-                shutil.move(os.path.join(temp_report_dir, 'metadata.pl'), os.path.join(report_dir, 'metadata.pl'))
-                os.removedirs(temp_report_dir)
+            shutil.move(os.path.join(temp_report_dir, filename), os.path.join(report_dir, filename))
+            shutil.move(os.path.join(temp_report_dir, 'metadata.pl'), os.path.join(report_dir, 'metadata.pl'))
+            os.removedirs(temp_report_dir)
 
-                ret_code = 201
-            else:
-                logger.debug('File is broken')
-                ret_code = 416
-            return 'OK', ret_code
-            # return 'OK', 201
-    else:
-        logger.debug('Invalid request')
-        # value.save(full_name)
+            ret_code = 201
+        else:
+            logger.debug('File is broken')
+            ret_code = 416
+        return 'OK', ret_code
+        # return 'OK', 201
+
 
     return 'OK', 308
 
